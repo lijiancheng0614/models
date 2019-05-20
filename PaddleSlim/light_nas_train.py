@@ -25,10 +25,9 @@ from utility import add_arguments, print_arguments
 IMAGENET1000 = 1281167
 parser = argparse.ArgumentParser(description=__doc__)
 add_arg = functools.partial(add_arguments, argparser=parser)
-add_arg(
-    'bottleneck_params_list', str,
-    '[1,16,1,1,3,1,0,6,24,2,2,3,1,0,6,32,3,2,3,1,0,6,64,3,2,5,1,0,6,96,3,1,3,1,0,6,160,3,2,3,1,0,6,320,1,1,3,1,0]',
-    "Network architecture.")
+add_arg('bottleneck_params_list', str, '[1,16,1,1,3,1,0,6,24,2,2,3,1,0,'
+        '6,32,3,2,3,1,0,6,64,4,2,3,1,0,6,96,3,1,3,1,0,6,160,3,2,3,1,0,'
+        '6,320,1,1,3,1,0]', "Network architecture.")
 add_arg('batch_size', int, 500, "Minibatch size.")
 add_arg('use_gpu', bool, True, "Whether to use GPU or not.")
 add_arg('total_images', int, 1281167, "Training image number.")

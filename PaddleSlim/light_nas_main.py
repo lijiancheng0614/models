@@ -391,6 +391,7 @@ def train(args):
         # test
         test_py_reader.start()
         test_batch_id = 0
+        test_time = []
         try:
             while True:
                 t1 = time.time()
@@ -404,6 +405,7 @@ def train(args):
                 test_info[0].append(loss)
                 test_info[1].append(acc1)
                 test_info[2].append(acc5)
+                test_time.append(period)
                 if test_batch_id % 100 == 0:
                     print("Pass {0},testbatch {1},loss {2}, \
                         acc1 {3},acc5 {4},time {5}"
@@ -417,7 +419,7 @@ def train(args):
         test_acc1 = np.array(test_info[1]).mean()
         test_acc5 = np.array(test_info[2]).mean()
         test_acc1 *= 100
-        period *= 1000
+        period = np.array(test_time[1:]).mean() * 1000
         print('{} {}% {}ms'.format(test_acc1 if period <= args.target_latency
                                    else 0, test_acc1, period))
         sys.stdout.flush()
