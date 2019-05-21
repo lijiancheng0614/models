@@ -365,12 +365,6 @@ def train(args):
                 train_info[2].append(acc5)
                 lr = np.mean(np.array(lr))
                 train_time.append(period)
-                if batch_id % 100 == 0:
-                    print("Pass {0}, trainbatch {1}, loss {2}, \
-                        acc1 {3}, acc5 {4}, lr{5}, time {6}"
-                          .format(pass_id, batch_id, loss, acc1, acc5, "%.5f" %
-                                  lr, "%2.2f sec" % period))
-                    sys.stdout.flush()
                 batch_id += 1
                 break
         except fluid.core.EOFException:
@@ -406,12 +400,6 @@ def train(args):
                 test_info[1].append(acc1)
                 test_info[2].append(acc5)
                 test_time.append(period)
-                if test_batch_id % 100 == 0:
-                    print("Pass {0},testbatch {1},loss {2}, \
-                        acc1 {3},acc5 {4},time {5}"
-                          .format(pass_id, test_batch_id, loss, acc1, acc5,
-                                  "%2.2f sec" % period))
-                    sys.stdout.flush()
                 test_batch_id += 1
         except fluid.core.EOFException:
             test_py_reader.reset()
