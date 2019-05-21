@@ -93,7 +93,7 @@ def main():
         help='variable range table.')
     parser.add_argument(
         '--reduce_rate',
-        default=0.9,
+        default=0.5,
         type=float,
         help='reduce rate for sa controller.')
     parser.add_argument(
@@ -103,7 +103,7 @@ def main():
         help='init temperature for sa controller.')
     # NAS related arguments
     parser.add_argument(
-        '--max_iterations', default=300, type=int, help='maximum iterations.')
+        '--max_iterations', default=100, type=int, help='maximum iterations.')
     parser.add_argument(
         '--init_var',
         default=[
