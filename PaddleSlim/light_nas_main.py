@@ -286,8 +286,6 @@ def train(args):
     place = fluid.CUDAPlace(0) if args.use_gpu else fluid.CPUPlace()
     exe = fluid.Executor(place)
     exe.run(startup_prog)
-    test_exe = fluid.Executor(fluid.CPUPlace())
-    test_exe.run(fluid.default_startup_program())
     if checkpoint:
         fluid.io.load_persistables(exe, checkpoint, main_program=train_prog)
     elif pretrained_model:
@@ -373,23 +371,14 @@ def train(args):
         train_acc5 = np.array(train_info[2]).mean()
         train_speed = np.array(train_time).mean() / (train_batch_size *
                                                      device_num)
-        # save
-        model_path = os.path.join(model_save_dir + '/' + model_name,
-                                  str(pass_id))
-        if not os.path.isdir(model_path):
-            os.makedirs(model_path)
-        fluid.io.save_persistables(exe, model_path, main_program=train_prog)
-        fluid.io.load_persistables(
-            executor=test_exe, dirname=model_path, main_program=test_prog)
-        # test
         test_py_reader.start()
         test_batch_id = 0
         test_time = []
         try:
             while True:
                 t1 = time.time()
-                loss, acc1, acc5 = test_exe.run(program=test_prog,
-                                                fetch_list=test_fetch_list)
+                loss, acc1, acc5 = exe.run(program=test_prog,
+                                           fetch_list=test_fetch_list)
                 t2 = time.time()
                 period = t2 - t1
                 loss = np.mean(loss)
@@ -410,6 +399,11 @@ def train(args):
         print('{} {}% {}ms'.format(test_acc1 if period <= args.target_latency
                                    else 0, test_acc1, period))
         sys.stdout.flush()
+        model_path = os.path.join(model_save_dir + '/' + model_name,
+                                  str(pass_id))
+        if not os.path.isdir(model_path):
+            os.makedirs(model_path)
+        fluid.io.save_persistables(exe, model_path, main_program=train_prog)
         # This is for continuous evaluation only
         if args.enable_ce and pass_id == args.num_epochs - 1:
             if device_num == 1:
