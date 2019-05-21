@@ -366,7 +366,6 @@ def train(args):
                 lr = np.mean(np.array(lr))
                 train_time.append(period)
                 batch_id += 1
-                break
         except fluid.core.EOFException:
             train_py_reader.reset()
         train_loss = np.array(train_info[0]).mean()
