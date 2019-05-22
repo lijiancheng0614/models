@@ -14,6 +14,8 @@ import numpy as np
 import paddle
 import paddle.fluid as fluid
 import paddle.dataset.flowers as flowers
+from paddle.fluid.contrib.slim import Context
+from paddle.fluid.contrib.slim.graph import GraphWrapper
 
 import reader
 import models
@@ -28,7 +30,8 @@ add_arg = functools.partial(add_arguments, argparser=parser)
 add_arg('bottleneck_params_list', str, '[1,16,1,1,3,1,0,6,24,2,2,3,1,0,'
         '6,32,3,2,3,1,0,6,64,4,2,3,1,0,6,96,3,1,3,1,0,6,160,3,2,3,1,0,'
         '6,320,1,1,3,1,0]', "Network architecture.")
-add_arg('target_latency', float, 60, "Target latency.")
+add_arg('target_latency', float, 592948064, "Target latency.")
+add_arg('metric', str, 'flops', "Metric for latency: flops/time.")
 add_arg('batch_size', int, 500, "Minibatch size.")
 add_arg('use_gpu', bool, True, "Whether to use GPU or not.")
 add_arg('total_images', int, 1281167, "Training image number.")
@@ -251,6 +254,25 @@ def get_device_num(use_gpu):
     return device_num
 
 
+def get_flops(test_prog, place):
+    """Get flops.
+
+    Args:
+        test_prog: test program.
+        place: place.
+
+    Returns:
+        flops: long, flops.
+        numel_params: numpy.int64, number of parameters.
+    """
+    eval_graph = GraphWrapper(test_prog)
+    context = Context(
+        place=place, scope=fluid.global_scope(), eval_graph=eval_graph)
+    flops = context.eval_graph.flops()
+    numel_params = context.eval_graph.numel_params()
+    return flops, numel_params
+
+
 def train(args):
     """train.
 
@@ -396,8 +418,13 @@ def train(args):
         test_acc5 = np.array(test_info[2]).mean()
         test_acc1 *= 100
         period = np.array(test_time[1:]).mean() * 1000
-        print('{} {}% {}ms'.format(test_acc1 if period <= args.target_latency
-                                   else 0, test_acc1, period))
+        flops, numel_params = get_flops(test_prog, place)
+        if args.metric == 'flops':
+            reward = test_acc1 if flops <= args.target_latency else 0
+        else:
+            reward = test_acc1 if period <= args.target_latency else 0
+        print('{} {}% {}ms flops: {} #params: {}'.format(
+            reward, test_acc1, period, flops, numel_params))
         sys.stdout.flush()
         model_path = os.path.join(model_save_dir + '/' + model_name,
                                   str(pass_id))
