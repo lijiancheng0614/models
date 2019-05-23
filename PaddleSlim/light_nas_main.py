@@ -30,7 +30,7 @@ add_arg = functools.partial(add_arguments, argparser=parser)
 add_arg('bottleneck_params_list', str, '[1,16,1,1,3,1,0,6,24,2,2,3,1,0,'
         '6,32,3,2,3,1,0,6,64,4,2,3,1,0,6,96,3,1,3,1,0,6,160,3,2,3,1,0,'
         '6,320,1,1,3,1,0]', "Network architecture.")
-add_arg('target_latency', float, 592948064, "Target latency.")
+add_arg('target_latency', float, 629145600, "Target latency.")
 add_arg('metric', str, 'flops', "Metric for latency: flops/time.")
 add_arg('batch_size', int, 500, "Minibatch size.")
 add_arg('use_gpu', bool, True, "Whether to use GPU or not.")
@@ -44,7 +44,7 @@ add_arg('with_mem_opt', bool, True,
 add_arg('pretrained_model', str, None, "Whether to use pretrained model.")
 add_arg('checkpoint', str, None, "Whether to resume checkpoint.")
 add_arg('lr', float, 0.1, "set learning rate.")
-add_arg('lr_strategy', str, "piecewise_decay",
+add_arg('lr_strategy', str, "cosine_decay",
         "Set the learning rate decay strategy.")
 add_arg('model', str, "LightNASNet", "Set the network to use.")
 add_arg('enable_ce', bool, False,

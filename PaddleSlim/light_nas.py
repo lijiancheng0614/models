@@ -8,7 +8,7 @@ from paddle.fluid.contrib.slim.search import Searcher
 from paddle.fluid.contrib.slim.search import SaController
 
 NAS_FILTER_SIZE = [[18, 24, 30], [24, 32, 40], [48, 64, 80], [72, 96, 120],
-                   [120, 160, 200]]
+                   [120, 160, 192]]
 NAS_LAYERS_NUMBER = [[1, 2, 3], [2, 3, 4], [3, 4, 5], [2, 3, 4], [2, 3, 4]]
 NAS_KERNEL_SIZE = [3, 5]
 NAS_FILTERS_MULTIPLIER = [3, 4, 5, 6]
@@ -93,12 +93,12 @@ def main():
         help='variable range table.')
     parser.add_argument(
         '--reduce_rate',
-        default=0.5,
+        default=0.85,
         type=float,
         help='reduce rate for sa controller.')
     parser.add_argument(
         '--init_temperature',
-        default=100,
+        default=1024,
         type=float,
         help='init temperature for sa controller.')
     # NAS related arguments
@@ -107,8 +107,8 @@ def main():
     parser.add_argument(
         '--init_var',
         default=[
-            3, 1, 1, 0, 1, 0, 3, 1, 1, 0, 1, 0, 3, 1, 1, 0, 1, 0, 3, 1, 1, 0, 1,
-            0, 3, 1, 1, 0, 1, 0
+            0, 1, 2, 0, 1, 0, 0, 2, 1, 1, 1, 0, 3, 2, 0, 1, 1, 0, 3, 1, 0, 0, 1,
+            0, 3, 2, 2, 1, 1, 0
         ],
         type=list,
         help='init variable list.')
