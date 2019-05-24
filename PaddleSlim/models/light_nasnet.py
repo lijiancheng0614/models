@@ -152,7 +152,6 @@ class LightNASNet(object):
         bn_name = name + '_bn'
         bn = fluid.layers.batch_norm(
             input=conv,
-            momentum=0.99,
             param_attr=ParamAttr(name=bn_name + "_scale"),
             bias_attr=ParamAttr(name=bn_name + "_offset"),
             moving_mean_name=bn_name + '_mean',
