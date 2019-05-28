@@ -28,7 +28,7 @@ add_arg = functools.partial(add_arguments, argparser=parser)
 add_arg('bottleneck_params_list', str, '[1,16,1,1,3,1,0,6,24,2,2,3,1,0,'
         '6,32,3,2,3,1,0,6,64,4,2,3,1,0,6,96,3,1,3,1,0,6,160,3,2,3,1,0,'
         '6,320,1,1,3,1,0]', "Network architecture.")
-add_arg('batch_size', int, 500, "Minibatch size.")
+add_arg('batch_size', int, 2, "Minibatch size.")
 add_arg('use_gpu', bool, True, "Whether to use GPU or not.")
 add_arg('total_images', int, 1281167, "Training image number.")
 add_arg('num_epochs', int, 240, "number of epochs.")
@@ -40,7 +40,7 @@ add_arg('with_mem_opt', bool, True,
 add_arg('pretrained_model', str, None, "Whether to use pretrained model.")
 add_arg('checkpoint', str, None, "Whether to resume checkpoint.")
 add_arg('lr', float, 0.1, "set learning rate.")
-add_arg('lr_strategy', str, "cosine_decay",
+add_arg('lr_strategy', str, "exponential_decay",
         "Set the learning rate decay strategy.")
 add_arg('model', str, "LightNASNet", "Set the network to use.")
 add_arg('enable_ce', bool, False,
@@ -124,6 +124,20 @@ def optimizer_setting(params):
             learning_rate=lr,
             momentum=momentum_rate,
             regularization=fluid.regularizer.L2Decay(l2_decay))
+    elif ls["name"] == "exponential_decay":
+        if "total_images" not in params:
+            total_images = IMAGENET1000
+        else:
+            total_images = params["total_images"]
+        batch_size = ls["batch_size"]
+        num_epochs = params["num_epochs"]
+        start_lr = params["lr"]
+        total_step = int((total_images / batch_size) * num_epochs)
+        decay_step = int((total_images / batch_size) * 2.4)
+        lr = fluid.layers.exponential_decay(
+            learning_rate=start_lr, decay_steps=decay_step, decay_rate=0.97, staircase=True)
+        optimizer = fluid.optimizer.SGDOptimizer(
+            learning_rate=lr)
     elif ls["name"] == "adam":
         lr = params["lr"]
         optimizer = fluid.optimizer.Adam(learning_rate=lr)
@@ -365,9 +379,8 @@ def train(args):
                 train_info[2].append(acc5)
                 lr = np.mean(np.array(lr))
                 train_time.append(period)
-                if batch_id % 10 == 0:
-                    print("Pass {0}, trainbatch {1}, loss {2}, \
-                        acc1 {3}, acc5 {4}, lr{5}, time {6}"
+                if batch_id % 1 == 0:
+                    print("Pass {0}, trainbatch {1}, loss {2}, acc1 {3}, acc5 {4}, lr{5}, time {6}"
                           .format(pass_id, batch_id, loss, acc1, acc5, "%.5f" %
                                   lr, "%2.2f sec" % period))
                     sys.stdout.flush()
