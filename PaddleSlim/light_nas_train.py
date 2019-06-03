@@ -394,7 +394,7 @@ def train(args):
         test_py_reader.start()
         test_batch_id = 0
         try:
-           while True:
+            while True:
                t1 = time.time()
                loss, acc1, acc5 = exe.run(program=test_prog,
                                           fetch_list=test_fetch_list)
@@ -414,19 +414,19 @@ def train(args):
                    sys.stdout.flush()
                test_batch_id += 1
         except fluid.core.EOFException:
-           test_py_reader.reset()
+            test_py_reader.reset()
         test_loss = np.array(test_info[0]).mean()
         test_acc1 = np.array(test_info[1]).mean()
         test_acc5 = np.array(test_info[2]).mean()
         print("End pass {0}, train_loss {1}, train_acc1 {2}, train_acc5 {3}, "
-             "test_loss {4}, test_acc1 {5}, test_acc5 {6}".format(
-                 pass_id, train_loss, train_acc1, train_acc5, test_loss,
-                 test_acc1, test_acc5))
+              "test_loss {4}, test_acc1 {5}, test_acc5 {6}".format(
+                  pass_id, train_loss, train_acc1, train_acc5, test_loss,
+                  test_acc1, test_acc5))
         if test_acc1 > result_best[5]:
-           result_best = [
-               pass_id, train_loss, train_acc1, train_acc5, test_loss,
-               test_acc1, test_acc5
-           ]
+            result_best = [
+                pass_id, train_loss, train_acc1, train_acc5, test_loss,
+                test_acc1, test_acc5
+            ]
         sys.stdout.flush()
         model_path = os.path.join(model_save_dir + '/' + model_name,
                                   str(pass_id))
