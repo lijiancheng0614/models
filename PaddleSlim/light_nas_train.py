@@ -395,24 +395,24 @@ def train(args):
         test_batch_id = 0
         try:
             while True:
-               t1 = time.time()
-               loss, acc1, acc5 = exe.run(program=test_prog,
-                                          fetch_list=test_fetch_list)
-               t2 = time.time()
-               period = t2 - t1
-               loss = np.mean(loss)
-               acc1 = np.mean(acc1)
-               acc5 = np.mean(acc5)
-               test_info[0].append(loss)
-               test_info[1].append(acc1)
-               test_info[2].append(acc5)
-               if test_batch_id % 10 == 0:
-                   print("Pass {0},testbatch {1},loss {2}, \
-                       acc1 {3},acc5 {4},time {5}"
-                         .format(pass_id, test_batch_id, loss, acc1, acc5,
-                                 "%2.2f sec" % period))
-                   sys.stdout.flush()
-               test_batch_id += 1
+                t1 = time.time()
+                loss, acc1, acc5 = exe.run(program=test_prog,
+                                           fetch_list=test_fetch_list)
+                t2 = time.time()
+                period = t2 - t1
+                loss = np.mean(loss)
+                acc1 = np.mean(acc1)
+                acc5 = np.mean(acc5)
+                test_info[0].append(loss)
+                test_info[1].append(acc1)
+                test_info[2].append(acc5)
+                if test_batch_id % 10 == 0:
+                    print("Pass {0},testbatch {1},loss {2}, \
+                        acc1 {3},acc5 {4},time {5}"
+                          .format(pass_id, test_batch_id, loss, acc1, acc5,
+                                  "%2.2f sec" % period))
+                    sys.stdout.flush()
+                test_batch_id += 1
         except fluid.core.EOFException:
             test_py_reader.reset()
         test_loss = np.array(test_info[0]).mean()
