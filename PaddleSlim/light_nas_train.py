@@ -287,10 +287,10 @@ def train(args):
         startup_prog=startup_prog,
         args=args)
     test_py_reader, test_cost, test_acc1, test_acc5 = build_program(
-       is_train=False,
-       main_prog=test_prog,
-       startup_prog=startup_prog,
-       args=args)
+        is_train=False,
+        main_prog=test_prog,
+        startup_prog=startup_prog,
+        args=args)
     test_prog = test_prog.clone(for_test=True)
     if with_memory_optimization:
         fluid.memory_optimize(train_prog)
@@ -319,7 +319,7 @@ def train(args):
     train_batch_size = args.batch_size / device_num
     test_batch_size = 16
     print('device_num: {}, train_batch_size: {}, test_batch_size: {}'.format(
-       device_num, train_batch_size, test_batch_size))
+        device_num, train_batch_size, test_batch_size))
     if not args.enable_ce:
         train_reader = paddle.batch(
             reader.train(), batch_size=train_batch_size, drop_last=True)
@@ -335,7 +335,7 @@ def train(args):
             batch_size=train_batch_size,
             drop_last=True)
         test_reader = paddle.batch(
-           flowers.test(use_xmap=False), batch_size=test_batch_size)
+            flowers.test(use_xmap=False), batch_size=test_batch_size)
     train_py_reader.decorate_paddle_reader(train_reader)
     test_py_reader.decorate_paddle_reader(test_reader)
     # use_ngraph = os.getenv('FLAGS_use_ngraph')
@@ -391,9 +391,9 @@ def train(args):
         train_acc5 = np.array(train_info[2]).mean()
         train_speed = np.array(train_time).mean() / (train_batch_size *
                                                      device_num)
-       test_py_reader.start()
-       test_batch_id = 0
-       try:
+        test_py_reader.start()
+        test_batch_id = 0
+        try:
            while True:
                t1 = time.time()
                loss, acc1, acc5 = exe.run(program=test_prog,
@@ -413,16 +413,16 @@ def train(args):
                                  "%2.2f sec" % period))
                    sys.stdout.flush()
                test_batch_id += 1
-       except fluid.core.EOFException:
+        except fluid.core.EOFException:
            test_py_reader.reset()
-       test_loss = np.array(test_info[0]).mean()
-       test_acc1 = np.array(test_info[1]).mean()
-       test_acc5 = np.array(test_info[2]).mean()
-       print("End pass {0}, train_loss {1}, train_acc1 {2}, train_acc5 {3}, "
+        test_loss = np.array(test_info[0]).mean()
+        test_acc1 = np.array(test_info[1]).mean()
+        test_acc5 = np.array(test_info[2]).mean()
+        print("End pass {0}, train_loss {1}, train_acc1 {2}, train_acc5 {3}, "
              "test_loss {4}, test_acc1 {5}, test_acc5 {6}".format(
                  pass_id, train_loss, train_acc1, train_acc5, test_loss,
                  test_acc1, test_acc5))
-       if test_acc1 > result_best[5]:
+        if test_acc1 > result_best[5]:
            result_best = [
                pass_id, train_loss, train_acc1, train_acc5, test_loss,
                test_acc1, test_acc5
@@ -459,9 +459,9 @@ def train(args):
                 print("kpis train_speed_card%s %s" % (device_num, train_speed))
     pass_id, train_loss, train_acc1, train_acc5, test_loss, test_acc1, test_acc5 = result_best
     print('Best result: pass {0}, train_loss {1}, train_acc1 {2}, train_acc5 '
-         '{3}, test_loss {4}, test_acc1 {5}, test_acc5 {6}'.format(
-             pass_id, train_loss, train_acc1, train_acc5, test_loss, test_acc1,
-             test_acc5))
+          '{3}, test_loss {4}, test_acc1 {5}, test_acc5 {6}'.format(
+              pass_id, train_loss, train_acc1, train_acc5, test_loss, test_acc1,
+              test_acc5))
 
 
 def main():
