@@ -62,11 +62,6 @@ class LightNASNet(object):
             ]
 
         #conv1
-        #print(input.shape)
-        input = fluid.layers.transpose(input, [0,2,3,1])
-        fluid.layers.Print(input=input, message="\nInput Features:",summarize=100)
-        input = fluid.layers.transpose(input, [0,3,1,2])
-        #print("Input Features Shape:", input.shape)
         input = self.conv_bn_layer(
             input,
             num_filters=int(32 * scale),
@@ -75,16 +70,11 @@ class LightNASNet(object):
             padding=1,
             if_act=True,
             name='conv1_1')
-        input = fluid.layers.transpose(input, [0,2,3,1])
-        fluid.layers.Print(input=input, message="\nLayer1 Features:",summarize=100)
-        input = fluid.layers.transpose(input, [0,3,1,2])
 
         # bottleneck sequences
         i = 1
         in_c = int(32 * scale)
         for layer_setting in bottleneck_params_list:
-            #print("===bottleneck_params_list===")
-            #print(len(bottleneck_params_list))
             t, c, n, s, k, ifshortcut, ifse = layer_setting
             i += 1
             input = self.invresi_blocks(
@@ -99,13 +89,6 @@ class LightNASNet(object):
                 ifse=ifse,
                 name='conv' + str(i))
             in_c = int(c * scale)
-
-
-
-        input = fluid.layers.transpose(input, [0,2,3,1])
-        fluid.layers.Print(input=input, message="\nPre conv_head:",summarize=100)
-        input = fluid.layers.transpose(input, [0,3,1,2])
-
         #last_conv
         input = self.conv_bn_layer(
             input=input,
@@ -116,31 +99,18 @@ class LightNASNet(object):
             if_act=True,
             name='conv9')
 
-        input = fluid.layers.transpose(input, [0,2,3,1])
-        fluid.layers.Print(input=input, message="\nPre Globalpooling:",summarize=100)
-        input = fluid.layers.transpose(input, [0,3,1,2])
-
         input = fluid.layers.pool2d(
             input=input,
             pool_size=7,
             pool_stride=1,
             pool_type='avg',
             global_pooling=True)
-        
-        input = fluid.layers.transpose(input, [0,2,3,1])
-	fluid.layers.Print(input=input, message="\n  ===Past Globalpooling:",summarize=-1)
-        input = fluid.layers.transpose(input, [0,3,1,2])
 
-        #output = fluid.layers.fc(input=input,
-        #                         size=class_dim,
-        #                         param_attr=ParamAttr(name='fc10_weights'),
-        #                         bias_attr=ParamAttr(name='fc10_offset'))
         output = fluid.layers.fc(input=input,
                                  size=class_dim,
                                  param_attr=fluid.initializer.Constant(value=0.1),
                                  bias_attr=None,
-                                 name='fc000000')
-        #fluid.layers.Print(input=output, message="\n  ===Past fc:",summarize=-1)
+                                 name='fc_out')
         return output
 
     def conv_bn_layer(self,
@@ -169,21 +139,13 @@ class LightNASNet(object):
         Returns:
             Variable, layers output.
         """
-        #print("===input.shape:===")
-        #print(input.shape[-1])
         input_size = input.shape[2]
         out_size = math.ceil(input_size / stride)
         padding_num = (out_size - 1) * stride + filter_size - input_size
         pad_left = int(math.floor(padding_num / 2))
         pad_right = int(padding_num - pad_left)
-        #print("pad2d:", pad_left, pad_right, input_size, out_size) 
-        input = fluid.layers.pad2d(input=input, paddings=[pad_left, pad_right, pad_left, pad_right]) 
-
-        if name=='conv1_1': 
-            input = fluid.layers.transpose(input, [0,2,3,1])
-            fluid.layers.Print(input=input, message="Conv1 Paded:",summarize=100)
-            input = fluid.layers.transpose(input, [0,3,1,2])
-
+        input = fluid.layers.pad2d(input=input,
+                                   paddings=[pad_left, pad_right, pad_left, pad_right])
         conv = fluid.layers.conv2d(
             input=input,
             num_filters=num_filters,
@@ -192,32 +154,19 @@ class LightNASNet(object):
             padding=0,
             groups=num_groups,
             act=None,
-            use_cudnn=False,
-            #param_attr=ParamAttr(name=name + '_weights'),
+            use_cudnn=use_cudnn,
             param_attr=fluid.initializer.Constant(value=0.1),
-            #bias_attr=False)
             bias_attr=False)
-        if name=='conv1_1': 
-            conv = fluid.layers.transpose(conv, [0,2,3,1])
-            fluid.layers.Print(input=conv, message="Only Conv1:",summarize=100)
-            conv = fluid.layers.transpose(conv, [0,3,1,2])
-        
+
         bn_name = name + '_bn'
         bn = fluid.layers.batch_norm(
             input=conv,
-            param_attr=fluid.initializer.Constant(value=1),
             momentum=0.99,
             epsilon=1e-3,
-            #param_attr=ParamAttr(name=bn_name + "_scale"),
+            param_attr=fluid.initializer.Constant(value=1),
             bias_attr=None,
-            #bias_attr=ParamAttr(name=bn_name + "_offset"),
             moving_mean_name=bn_name + '_mean',
             moving_variance_name=bn_name + '_variance')
-
-        if name=='conv1_1': 
-            bn = fluid.layers.transpose(bn, [0,2,3,1])
-            fluid.layers.Print(input=bn, message="BN0:",summarize=100)
-            bn = fluid.layers.transpose(bn, [0,3,1,2])
 
         if if_act:
             return fluid.layers.relu(bn)
@@ -259,23 +208,19 @@ class LightNASNet(object):
             input=pool,
             size=num_channels // reduction_ratio,
             act='relu',
-            param_attr=fluid.initializer.Constant(value=0.1),
+            param_attr=fluid.param_attr.ParamAttr(
+                initializer=fluid.initializer.Constant(value=0.1),
+                name=name + '_sqz_weights'),
             bias_attr=None)
-            #param_attr=fluid.param_attr.ParamAttr(
-            #    initializer=fluid.initializer.Uniform(-stdv, stdv),
-            #    name=name + '_sqz_weights'),
-            #bias_attr=ParamAttr(name=name + '_sqz_offset'))
         stdv = 1.0 / math.sqrt(squeeze.shape[1] * 1.0)
         excitation = fluid.layers.fc(
             input=squeeze,
             size=num_channels,
             act='sigmoid',
-            param_attr=fluid.initializer.Constant(value=0.1),
+            param_attr=fluid.param_attr.ParamAttr(
+                initializer=fluid.initializer.Constant(value=0.1),
+                name=name + '_exc_weights'),
             bias_attr=None)
-            #param_attr=fluid.param_attr.ParamAttr(
-            #    initializer=fluid.initializer.Uniform(-stdv, stdv),
-            #    name=name + '_exc_weights'),
-            #bias_attr=ParamAttr(name=name + '_exc_offset'))
         scale = fluid.layers.elementwise_mul(x=input, y=excitation, axis=0)
         return scale
 
@@ -307,13 +252,7 @@ class LightNASNet(object):
             Variable, layers output.
         """
         num_expfilter = int(round(num_in_filter * expansion_factor))
-        
         x = input
-
-        x = fluid.layers.transpose(x, [0,2,3,1])
-        fluid.layers.Print(input=x, message="\nBlock1stIn:",summarize=100)
-        x = fluid.layers.transpose(x, [0,3,1,2])
-
         if int(expansion_factor) != 1:
             x = self.conv_bn_layer(
                 input=x,
@@ -324,10 +263,6 @@ class LightNASNet(object):
                 num_groups=1,
                 if_act=True,
                 name=name + '_expand')
-        
-        x = fluid.layers.transpose(x, [0,2,3,1])
-        fluid.layers.Print(input=x, message="\nchannel_expand:",summarize=100)
-        x = fluid.layers.transpose(x, [0,3,1,2])
 
         bottleneck_conv = self.conv_bn_layer(
             input=x,
@@ -340,10 +275,6 @@ class LightNASNet(object):
             name=name + '_dwise',
             use_cudnn=False)
 
-        bottleneck_conv = fluid.layers.transpose(bottleneck_conv, [0,2,3,1])
-        fluid.layers.Print(input=bottleneck_conv, message="\nDepthwiseConv:",summarize=100)
-        bottleneck_conv = fluid.layers.transpose(bottleneck_conv, [0,3,1,2])
-
         linear_out = self.conv_bn_layer(
             input=bottleneck_conv,
             num_filters=num_filters,
@@ -354,16 +285,8 @@ class LightNASNet(object):
             if_act=False,
             name=name + '_linear')
         out = linear_out
-        out = fluid.layers.transpose(out, [0,2,3,1])
-        fluid.layers.Print(input=out, message="\nProjectConv:",summarize=100)
-        out = fluid.layers.transpose(out, [0,3,1,2])
-
         if ifshortcut:
             out = self.shortcut(input=input, data_residual=out)
-            
-            out = fluid.layers.transpose(out, [0,2,3,1])
-            fluid.layers.Print(input=out, message="\nPast Shortcut:",summarize=100)
-            out = fluid.layers.transpose(out, [0,3,1,2])
         if ifse:
             scale = self.squeeze_excitation(
                 input=linear_out,
