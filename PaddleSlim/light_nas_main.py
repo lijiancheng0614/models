@@ -163,6 +163,8 @@ def net_config(image, label, model, args):
                     class_dim=class_dim)
     cost, pred = fluid.layers.softmax_with_cross_entropy(
         out, label, return_softmax=True)
+    fluid.layers.Print(input=pred, message="\npred:",summarize=200)
+    fluid.layers.Print(input=cost, message="\ncost:",summarize=200)
     if args.scale_loss > 1:
         avg_cost = fluid.layers.mean(x=cost) * float(args.scale_loss)
     else:

@@ -8,16 +8,20 @@ from PIL import Image, ImageEnhance
 
 random.seed(0)
 np.random.seed(0)
+np.set_printoptions(threshold = np.inf) 
+
 
 DATA_DIM = 224
 
-THREAD = 16
+THREAD = 1
 BUF_SIZE = 10240
 
-DATA_DIR = 'data/ILSVRC2012'
+DATA_DIR = '/home/paddle/baiyifan/data/one_img/train'
 
 img_mean = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
 img_std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
+#img_mean = np.array([0.485, 0.456, 0.406]).reshape((1, 1, 3))
+#img_std = np.array([0.229, 0.224, 0.225]).reshape((1, 1, 3))
 
 
 def resize_short(img, target_size):
@@ -39,7 +43,8 @@ def crop_image(img, target_size, center):
         h_start = np.random.randint(0, height - size + 1)
     w_end = w_start + size
     h_end = h_start + size
-    img = img.crop((w_start, h_start, w_end, h_end))
+    #img = img.crop((w_start, h_start, w_end, h_end))
+    img = img.crop((0, 0, 224, 224))
     return img
 
 
@@ -72,6 +77,11 @@ def rotate_image(img):
     img = img.rotate(angle)
     return img
 
+def flip_image(img):
+    chance = np.random.randint(2)
+    if chance == 1:
+        img.transpose(img.FLIP_LEFT_RIGHT)
+    return img
 
 def distort_color(img):
     def random_brightness(img, lower=0.5, upper=1.5):
@@ -99,25 +109,43 @@ def distort_color(img):
 def process_image(sample, mode, color_jitter, rotate):
     img_path = sample[0]
 
+    #pix = img.load()
+    #print(pix[1][1][1])
+
     img = Image.open(img_path)
-    if mode == 'train':
-        if rotate: img = rotate_image(img)
-        img = random_crop(img, DATA_DIM)
-    else:
-        img = resize_short(img, target_size=256)
-        img = crop_image(img, target_size=DATA_DIM, center=True)
-    if mode == 'train':
-        if color_jitter:
-            img = distort_color(img)
-        if np.random.randint(0, 2) == 1:
-            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+    npimg = np.array(img)
+    print("image_size:", npimg.shape)
+    #img = crop_image(img, target_size=DATA_DIM, center=True)
+    #print("cropped image shape:", img.shape)
+    #print("cropped image:", img)
 
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
+    #print("image:", npimg)
+    #if mode == 'train':
+        #img = flip_image(img)        
+ 
+    #    if rotate: img = rotate_image(img)
+        #img = random_crop(img, DATA_DIM)
+    #else:
+    #    img = resize_short(img, target_size=256)
+    #    img = crop_image(img, target_size=DATA_DIM, center=True)
+    #if mode == 'train':
+    #    if color_jitter:
+    #        img = distort_color(img)
+    #    if np.random.randint(0, 2) == 1:
+    #        img = img.transpose(Image.FLIP_LEFT_RIGHT)
 
+    #if img.mode != 'RGB':
+    #    img = img.convert('RGB')
+
+    #img = np.array(img).astype('float32').transpose((2, 0, 1)) / 255
+    #img = np.array(img).astype('float32') / 255
     img = np.array(img).astype('float32').transpose((2, 0, 1)) / 255
+    print("post-scale image:", img)
     img -= img_mean
+    print("post-sub image:", img)
     img /= img_std
+    print("Post-norm image:", img)
+    print("image shape:", img.shape)
 
     if mode == 'train' or mode == 'val':
         return img, sample[1]
@@ -149,7 +177,9 @@ def _reader_creator(file_list,
                     % (trainer_id * per_node_lines, per_node_lines, len(lines),
                        len(full_lines)))
             else:
+                #print("===full_lines===")
                 lines = full_lines
+                #print(lines)
 
             for line in lines:
                 if mode == 'train' or mode == 'val':
@@ -172,7 +202,7 @@ def train(data_dir=DATA_DIR):
     return _reader_creator(
         file_list,
         'train',
-        shuffle=True,
+        shuffle=False,
         color_jitter=False,
         rotate=False,
         data_dir=data_dir)
