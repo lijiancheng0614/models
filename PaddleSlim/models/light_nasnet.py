@@ -108,9 +108,8 @@ class LightNASNet(object):
 
         output = fluid.layers.fc(input=input,
                                  size=class_dim,
-                                 param_attr=fluid.initializer.Constant(value=0.1),
-                                 bias_attr=None,
-                                 name='fc_out')
+                                 param_attr=ParamAttr(name='fc10_weights'),
+                                 bias_attr=None)
         return output
 
     def conv_bn_layer(self,
@@ -155,7 +154,7 @@ class LightNASNet(object):
             groups=num_groups,
             act=None,
             use_cudnn=use_cudnn,
-            param_attr=fluid.initializer.Constant(value=0.1),
+            param_attr=ParamAttr(name=name + '_weights'),
             bias_attr=False)
 
         bn_name = name + '_bn'
@@ -163,8 +162,8 @@ class LightNASNet(object):
             input=conv,
             momentum=0.99,
             epsilon=1e-3,
-            param_attr=fluid.initializer.Constant(value=1),
-            bias_attr=None,
+            param_attr=ParamAttr(name=bn_name + "_scale"),
+            bias_attr=ParamAttr(name=bn_name + "_offset"),
             moving_mean_name=bn_name + '_mean',
             moving_variance_name=bn_name + '_variance')
 
@@ -209,18 +208,18 @@ class LightNASNet(object):
             size=num_channels // reduction_ratio,
             act='relu',
             param_attr=fluid.param_attr.ParamAttr(
-                initializer=fluid.initializer.Constant(value=0.1),
+                initializer=fluid.initializer.Uniform(-stdv, stdv),
                 name=name + '_sqz_weights'),
-            bias_attr=None)
+            bias_attr=False)
         stdv = 1.0 / math.sqrt(squeeze.shape[1] * 1.0)
         excitation = fluid.layers.fc(
             input=squeeze,
             size=num_channels,
             act='sigmoid',
             param_attr=fluid.param_attr.ParamAttr(
-                initializer=fluid.initializer.Constant(value=0.1),
+                initializer=fluid.initializer.Uniform(-stdv, stdv),
                 name=name + '_exc_weights'),
-            bias_attr=None)
+            bias_attr=False)
         scale = fluid.layers.elementwise_mul(x=input, y=excitation, axis=0)
         return scale
 
