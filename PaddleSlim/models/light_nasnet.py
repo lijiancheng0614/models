@@ -109,7 +109,7 @@ class LightNASNet(object):
         output = fluid.layers.fc(input=input,
                                  size=class_dim,
                                  param_attr=ParamAttr(name='fc10_weights'),
-                                 bias_attr=None)
+                                 bias_attr=False)
         return output
 
     def conv_bn_layer(self,
