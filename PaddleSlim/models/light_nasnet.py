@@ -4,6 +4,7 @@ from __future__ import division
 from __future__ import print_function
 
 import math
+import numpy as np
 import paddle.fluid as fluid
 from paddle.fluid.param_attr import ParamAttr
 
@@ -106,10 +107,17 @@ class LightNASNet(object):
             pool_type='avg',
             global_pooling=True)
 
-        output = fluid.layers.fc(input=input,
-                                 size=class_dim,
-                                 param_attr=ParamAttr(name='fc10_weights'),
-                                 bias_attr=False)
+        input = fluid.layers.dropout(input, 0.2)
+
+        init_range = 1.0 / np.sqrt(class_dim)
+        output = fluid.layers.fc(
+            input=input,
+            size=class_dim,
+            param_attr=ParamAttr(
+                name='fc10_weights',
+                initializer=fluid.initializer.UniformInitializer(
+                    low=-init_range, high=init_range)),
+            bias_attr=False)
         return output
 
     def conv_bn_layer(self,
@@ -143,8 +151,10 @@ class LightNASNet(object):
         padding_num = (out_size - 1) * stride + filter_size - input_size
         pad_left = int(math.floor(padding_num / 2))
         pad_right = int(padding_num - pad_left)
-        input = fluid.layers.pad2d(input=input,
-                                   paddings=[pad_left, pad_right, pad_left, pad_right])
+        input = fluid.layers.pad2d(
+            input=input, paddings=[pad_left, pad_right, pad_left, pad_right])
+
+        fan_out = int(filter_size * filter_size * num_filters)
         conv = fluid.layers.conv2d(
             input=input,
             num_filters=num_filters,
@@ -154,7 +164,10 @@ class LightNASNet(object):
             groups=num_groups,
             act=None,
             use_cudnn=use_cudnn,
-            param_attr=ParamAttr(name=name + '_weights'),
+            param_attr=ParamAttr(
+                name=name + '_weights',
+                initializer=fluid.initializer.Normal(
+                    loc=0.0, scale=np.sqrt(2.0 / fan_out))),
             bias_attr=False)
 
         bn_name = name + '_bn'
@@ -210,7 +223,7 @@ class LightNASNet(object):
             param_attr=fluid.param_attr.ParamAttr(
                 initializer=fluid.initializer.Uniform(-stdv, stdv),
                 name=name + '_sqz_weights'),
-            bias_attr=False)
+            bias_attr=ParamAttr(name=name + '_sqz_offset'))
         stdv = 1.0 / math.sqrt(squeeze.shape[1] * 1.0)
         excitation = fluid.layers.fc(
             input=squeeze,
@@ -219,7 +232,7 @@ class LightNASNet(object):
             param_attr=fluid.param_attr.ParamAttr(
                 initializer=fluid.initializer.Uniform(-stdv, stdv),
                 name=name + '_exc_weights'),
-            bias_attr=False)
+            bias_attr=ParamAttr(name=name + '_exc_offset'))
         scale = fluid.layers.elementwise_mul(x=input, y=excitation, axis=0)
         return scale
 
