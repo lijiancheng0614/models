@@ -25,7 +25,10 @@ from utility import add_arguments, print_arguments
 IMAGENET1000 = 1281167
 parser = argparse.ArgumentParser(description=__doc__)
 add_arg = functools.partial(add_arguments, argparser=parser)
-add_arg('bottleneck_params_list', str, '[1,16,1,1,3,1,0,3,24,3,2,3,1,0,3,40,3,2,5,1,0,6,80,3,2,5,1,0,6,96,2,1,3,1,0,6,192,4,2,5,1,0,6,320,1,1,3,1,0]', "Network architecture.")
+add_arg(
+    'bottleneck_params_list', str,
+    '[1,16,1,1,3,1,0,3,24,3,2,3,1,0,3,40,3,2,5,1,0,6,80,3,2,5,1,0,6,96,2,1,3,1,0,6,192,4,2,5,1,0,6,320,1,1,3,1,0]',
+    "Network architecture.")
 add_arg('batch_size', int, 500, "Minibatch size.")
 add_arg('use_gpu', bool, True, "Whether to use GPU or not.")
 add_arg('total_images', int, 1281167, "Training image number.")
@@ -47,6 +50,10 @@ add_arg('data_dir', str, "./data/ILSVRC2012", "The ImageNet dataset root dir.")
 add_arg('fp16', bool, False, "Enable half precision training with fp16.")
 add_arg('scale_loss', float, 1.0, "Scale loss for fp16.")
 add_arg('l2_decay', float, 4e-5, "L2_decay parameter.")
+add_arg('use_label_smoothing', bool, True,
+        "Whether to use label_smoothing or not")
+add_arg('label_smoothing_epsilon', float, 0.1,
+        "Set the L2_dlabel_smoothing_epsilon parameter")
 add_arg('momentum_rate', float, 0.9, "momentum_rate.")
 add_arg('use_ngraph', bool, False, "Whether to use NGraph engine or not.")
 
@@ -135,8 +142,7 @@ def optimizer_setting(params):
         lr = start_lr
         #lr = fluid.layers.exponential_decay(
         #    learning_rate=start_lr, decay_steps=decay_step, decay_rate=0.97, staircase=True)
-        optimizer = fluid.optimizer.SGDOptimizer(
-            learning_rate=lr)
+        optimizer = fluid.optimizer.SGDOptimizer(learning_rate=lr)
     elif ls["name"] == "adam":
         lr = params["lr"]
         optimizer = fluid.optimizer.Adam(learning_rate=lr)
@@ -170,8 +176,17 @@ def net_config(image, label, model, args):
     out = model.net(input=image,
                     bottleneck_params_list=bottleneck_params_list,
                     class_dim=class_dim)
-    cost, pred = fluid.layers.softmax_with_cross_entropy(
-        out, label, return_softmax=True)
+    if args.use_label_smoothing:
+        label_one_hot = fluid.layers.one_hot(input=label, depth=class_dim)
+        soft_label = fluid.layers.label_smooth(
+            label=label_one_hot,
+            epsilon=args.label_smoothing_epsilon,
+            dtype='float32')
+        cost, pred = fluid.layers.softmax_with_cross_entropy(
+            out, soft_label, soft_label=True, return_softmax=True)
+    else:
+        cost, pred = fluid.layers.softmax_with_cross_entropy(
+            out, label, return_softmax=True)
     if args.scale_loss > 1:
         avg_cost = fluid.layers.mean(x=cost) * float(args.scale_loss)
     else:
@@ -379,9 +394,10 @@ def train(args):
                 lr = np.mean(np.array(lr))
                 train_time.append(period)
                 if batch_id % 10 == 0:
-                    print("Pass {0}, trainbatch {1}, loss {2}, acc1 {3}, acc5 {4}, lr{5}, time {6}"
-                          .format(pass_id, batch_id, loss, acc1, acc5, "%.5f" %
-                                  lr, "%2.2f sec" % period))
+                    print(
+                        "Pass {0}, trainbatch {1}, loss {2}, acc1 {3}, acc5 {4}, lr{5}, time {6}"
+                        .format(pass_id, batch_id, loss, acc1, acc5, "%.5f" %
+                                lr, "%2.2f sec" % period))
                     sys.stdout.flush()
                 batch_id += 1
         except fluid.core.EOFException:
@@ -469,7 +485,9 @@ def main():
     """
     args = parser.parse_args()
     print_arguments(args)
+    print('{} begin.'.format(time.ctime()))
     train(args)
+    print('{} end.'.format(time.ctime()))
 
 
 if __name__ == '__main__':
