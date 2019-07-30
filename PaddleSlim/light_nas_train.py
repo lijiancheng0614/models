@@ -29,10 +29,10 @@ add_arg(
     'bottleneck_params_list', str,
     '[1,16,1,1,3,1,0,3,24,3,2,3,1,0,3,40,3,2,5,1,0,6,80,3,2,5,1,0,6,96,2,1,3,1,0,6,192,4,2,5,1,0,6,320,1,1,3,1,0]',
     "Network architecture.")
-add_arg('batch_size', int, 500, "Minibatch size.")
+add_arg('batch_size', int, 256, "Minibatch size.")
 add_arg('use_gpu', bool, True, "Whether to use GPU or not.")
 add_arg('total_images', int, 1281167, "Training image number.")
-add_arg('num_epochs', int, 240, "number of epochs.")
+add_arg('num_epochs', int, 350, "number of epochs.")
 add_arg('class_dim', int, 1000, "Class number.")
 add_arg('image_shape', str, "3,224,224", "input image size")
 add_arg('model_save_dir', str, "output", "model save directory")
@@ -40,8 +40,8 @@ add_arg('with_mem_opt', bool, True,
         "Whether to use memory optimization or not.")
 add_arg('pretrained_model', str, None, "Whether to use pretrained model.")
 add_arg('checkpoint', str, None, "Whether to resume checkpoint.")
-add_arg('lr', float, 0.1, "set learning rate.")
-add_arg('lr_strategy', str, "cosine_decay",
+add_arg('lr', float, 0.016, "set learning rate.")
+add_arg('lr_strategy', str, "exponential_decay_with_RMSProp",
         "Set the learning rate decay strategy.")
 add_arg('model', str, "LightNASNet", "Set the network to use.")
 add_arg('enable_ce', bool, False,
@@ -49,11 +49,13 @@ add_arg('enable_ce', bool, False,
 add_arg('data_dir', str, "./data/ILSVRC2012", "The ImageNet dataset root dir.")
 add_arg('fp16', bool, False, "Enable half precision training with fp16.")
 add_arg('scale_loss', float, 1.0, "Scale loss for fp16.")
-add_arg('l2_decay', float, 4e-5, "L2_decay parameter.")
+add_arg('l2_decay', float, 1e-5, "L2_decay parameter.")
 add_arg('use_label_smoothing', bool, True,
         "Whether to use label_smoothing or not")
 add_arg('label_smoothing_epsilon', float, 0.1,
         "Set the L2_dlabel_smoothing_epsilon parameter")
+add_arg('use_ema', bool, True, "use_ema.")
+add_arg('ema_decay', float, 0.9998, "ema decay rate")
 add_arg('momentum_rate', float, 0.9, "momentum_rate.")
 add_arg('use_ngraph', bool, False, "Whether to use NGraph engine or not.")
 
@@ -113,6 +115,25 @@ def optimizer_setting(params):
                 learning_rate=lr, step_each_epoch=step, epochs=num_epochs),
             momentum=momentum_rate,
             regularization=fluid.regularizer.L2Decay(l2_decay))
+    elif ls["name"] == "exponential_decay_with_RMSProp":
+        if "total_images" not in params:
+            total_images = IMAGENET1000
+        else:
+            total_images = params["total_images"]
+        batch_size = ls["batch_size"]
+        step = int(math.ceil(float(total_images) / batch_size))
+        decay_step = int(2.4 * step)
+        lr = params["lr"]
+        num_epochs = params["num_epochs"]
+        optimizer = fluid.optimizer.RMSProp(
+            learning_rate=fluid.layers.exponential_decay(learning_rate=lr,
+                                                         decay_steps=decay_step,
+                                                         decay_rate=0.97,
+                                                         staircase=False),
+            regularization=fluid.regularizer.L2Decay(l2_decay),
+            momentum=0.9,
+            rho=0.9,
+            epsilon=0.001)
     elif ls["name"] == "linear_decay":
         if "total_images" not in params:
             total_images = IMAGENET1000
@@ -251,8 +272,17 @@ def build_program(is_train, main_prog, startup_prog, args):
                 else:
                     optimizer.minimize(avg_cost)
                 global_lr = optimizer._global_learning_rate()
+                if args.use_ema:
+                    global_steps = fluid.layers.learning_rate_scheduler._decay_step_counter(
+                    )
+                    ema = fluid.optimizer.ExponentialMovingAverage(
+                        args.ema_decay, thres_steps=global_steps)
+                    ema.update()
     if is_train:
-        return py_reader, avg_cost, acc_top1, acc_top5, global_lr
+        if args.use_ema:
+            return py_reader, avg_cost, acc_top1, acc_top5, global_lr, ema
+        else:
+            return py_reader, avg_cost, acc_top1, acc_top5, global_lr
     else:
         return py_reader, avg_cost, acc_top1, acc_top5
 
@@ -296,11 +326,18 @@ def train(args):
     if args.enable_ce:
         startup_prog.random_seed = 1000
         train_prog.random_seed = 1000
-    train_py_reader, train_cost, train_acc1, train_acc5, global_lr = build_program(
-        is_train=True,
-        main_prog=train_prog,
-        startup_prog=startup_prog,
-        args=args)
+    if args.use_ema:
+        train_py_reader, train_cost, train_acc1, train_acc5, global_lr, ema = build_program(
+            is_train=True,
+            main_prog=train_prog,
+            startup_prog=startup_prog,
+            args=args)
+    else:
+        train_py_reader, train_cost, train_acc1, train_acc5, global_lr = build_program(
+            is_train=True,
+            main_prog=train_prog,
+            startup_prog=startup_prog,
+            args=args)
     test_py_reader, test_cost, test_acc1, test_acc5 = build_program(
         is_train=False,
         main_prog=test_prog,
@@ -407,48 +444,96 @@ def train(args):
         train_acc5 = np.array(train_info[2]).mean()
         train_speed = np.array(train_time).mean() / (train_batch_size *
                                                      device_num)
-        test_py_reader.start()
-        test_batch_id = 0
-        try:
-            while True:
-                t1 = time.time()
-                loss, acc1, acc5 = exe.run(program=test_prog,
-                                           fetch_list=test_fetch_list)
-                t2 = time.time()
-                period = t2 - t1
-                loss = np.mean(loss)
-                acc1 = np.mean(acc1)
-                acc5 = np.mean(acc5)
-                test_info[0].append(loss)
-                test_info[1].append(acc1)
-                test_info[2].append(acc5)
-                if test_batch_id % 10 == 0:
-                    print("Pass {0},testbatch {1},loss {2}, \
-                        acc1 {3},acc5 {4},time {5}"
-                          .format(pass_id, test_batch_id, loss, acc1, acc5,
-                                  "%2.2f sec" % period))
-                    sys.stdout.flush()
-                test_batch_id += 1
-        except fluid.core.EOFException:
-            test_py_reader.reset()
-        test_loss = np.array(test_info[0]).mean()
-        test_acc1 = np.array(test_info[1]).mean()
-        test_acc5 = np.array(test_info[2]).mean()
-        print("End pass {0}, train_loss {1}, train_acc1 {2}, train_acc5 {3}, "
-              "test_loss {4}, test_acc1 {5}, test_acc5 {6}".format(
-                  pass_id, train_loss, train_acc1, train_acc5, test_loss,
-                  test_acc1, test_acc5))
-        if test_acc1 > result_best[5]:
-            result_best = [
-                pass_id, train_loss, train_acc1, train_acc5, test_loss,
-                test_acc1, test_acc5
-            ]
-        sys.stdout.flush()
-        model_path = os.path.join(model_save_dir + '/' + model_name,
-                                  str(pass_id))
-        if not os.path.isdir(model_path):
-            os.makedirs(model_path)
-        fluid.io.save_persistables(exe, model_path, main_program=train_prog)
+        if args.use_ema:
+            with ema.apply(exe):
+                test_py_reader.start()
+                test_batch_id = 0
+                try:
+                    while True:
+                        t1 = time.time()
+                        loss, acc1, acc5 = exe.run(program=test_prog,
+                                                   fetch_list=test_fetch_list)
+                        t2 = time.time()
+                        period = t2 - t1
+                        loss = np.mean(loss)
+                        acc1 = np.mean(acc1)
+                        acc5 = np.mean(acc5)
+                        test_info[0].append(loss)
+                        test_info[1].append(acc1)
+                        test_info[2].append(acc5)
+                        if test_batch_id % 10 == 0:
+                            print("Pass {0},testbatch {1},loss {2}, \
+                                acc1 {3},acc5 {4},time {5}"
+                                  .format(pass_id, test_batch_id, loss, acc1,
+                                          acc5, "%2.2f sec" % period))
+                            sys.stdout.flush()
+                        test_batch_id += 1
+                except fluid.core.EOFException:
+                    test_py_reader.reset()
+                test_loss = np.array(test_info[0]).mean()
+                test_acc1 = np.array(test_info[1]).mean()
+                test_acc5 = np.array(test_info[2]).mean()
+                print(
+                    "End pass {0}, train_loss {1}, train_acc1 {2}, train_acc5 {3}, "
+                    "test_loss {4}, test_acc1 {5}, test_acc5 {6}".format(
+                        pass_id, train_loss, train_acc1, train_acc5, test_loss,
+                        test_acc1, test_acc5))
+                if test_acc1 > result_best[5]:
+                    result_best = [
+                        pass_id, train_loss, train_acc1, train_acc5, test_loss,
+                        test_acc1, test_acc5
+                    ]
+                sys.stdout.flush()
+                model_path = os.path.join(model_save_dir + '/' + model_name,
+                                          str(pass_id))
+                if not os.path.isdir(model_path):
+                    os.makedirs(model_path)
+                fluid.io.save_persistables(
+                    exe, model_path, main_program=train_prog)
+        else:
+            test_py_reader.start()
+            test_batch_id = 0
+            try:
+                while True:
+                    t1 = time.time()
+                    loss, acc1, acc5 = exe.run(program=test_prog,
+                                               fetch_list=test_fetch_list)
+                    t2 = time.time()
+                    period = t2 - t1
+                    loss = np.mean(loss)
+                    acc1 = np.mean(acc1)
+                    acc5 = np.mean(acc5)
+                    test_info[0].append(loss)
+                    test_info[1].append(acc1)
+                    test_info[2].append(acc5)
+                    if test_batch_id % 10 == 0:
+                        print("Pass {0},testbatch {1},loss {2}, \
+                            acc1 {3},acc5 {4},time {5}"
+                              .format(pass_id, test_batch_id, loss, acc1, acc5,
+                                      "%2.2f sec" % period))
+                        sys.stdout.flush()
+                    test_batch_id += 1
+            except fluid.core.EOFException:
+                test_py_reader.reset()
+            test_loss = np.array(test_info[0]).mean()
+            test_acc1 = np.array(test_info[1]).mean()
+            test_acc5 = np.array(test_info[2]).mean()
+            print(
+                "End pass {0}, train_loss {1}, train_acc1 {2}, train_acc5 {3}, "
+                "test_loss {4}, test_acc1 {5}, test_acc5 {6}".format(
+                    pass_id, train_loss, train_acc1, train_acc5, test_loss,
+                    test_acc1, test_acc5))
+            if test_acc1 > result_best[5]:
+                result_best = [
+                    pass_id, train_loss, train_acc1, train_acc5, test_loss,
+                    test_acc1, test_acc5
+                ]
+            sys.stdout.flush()
+            model_path = os.path.join(model_save_dir + '/' + model_name,
+                                      str(pass_id))
+            if not os.path.isdir(model_path):
+                os.makedirs(model_path)
+            fluid.io.save_persistables(exe, model_path, main_program=train_prog)
         # This is for continuous evaluation only
         if args.enable_ce and pass_id == args.num_epochs - 1:
             if device_num == 1:
